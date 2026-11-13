@@ -5,7 +5,12 @@ import httpx
 import xml.etree.ElementTree as ET
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("pubmed-research-assistant", stateless_http=True)
+mcp = FastMCP(
+    "pubmed-research-assistant",
+    stateless_http=True,
+    host="0.0.0.0",
+    port=int(os.getenv("PORT", "8000"))
+)
 BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
 async def request(endpoint: str, params: dict):
