@@ -722,7 +722,7 @@ async def find_open_access_articles(
         query=query,
         limit=limit,
         open_access_only=True,
-        sort_recent=False
+        sort_recent=True
     )
 
 
