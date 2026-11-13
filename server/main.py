@@ -361,7 +361,7 @@ async def search_europe_pmc(
     query: str,
     limit: int = 20,
     open_access_only: bool = False,
-    sort_recent: bool = True
+    sort_recent: bool = False
 ) -> dict:
     """
     Search Europe PMC for scientific literature.
@@ -722,7 +722,7 @@ async def find_open_access_articles(
         query=query,
         limit=limit,
         open_access_only=True,
-        sort_recent=True
+        sort_recent=False
     )
 
 
