@@ -133,6 +133,223 @@ async def fetch_pubmed_articles(pmids: list[str]) -> list[dict]:
         })
 
     return records
+# ==========================================
+# EUROPE PMC INTEGRATION
+# ==========================================
+
+EUROPE_PMC_BASE = (
+    "https://www.ebi.ac.uk/europepmc/webservices/rest"
+)
+
+
+@mcp.tool()
+async def search_europe_pmc(
+    query: str,
+    limit: int = 20,
+    open_access_only: bool = False,
+    sort_recent: bool = True
+) -> dict:
+    """
+    Search Europe PMC for biomedical research papers.
+
+    Supports abstracts, publication metadata,
+    preprints and open-access discovery.
+    """
+
+    if not query.strip():
+        raise ValueError("Search query cannot be empty")
+
+    limit = max(1, min(int(limit), 100))
+
+    search_query = query.strip()
+
+    if open_access_only:
+        search_query += " AND OPEN_ACCESS:Y"
+
+    if sort_recent:
+        search_query += " sort_date:y"
+
+    params = {
+        "query": search_query,
+        "format": "json",
+        "resultType": "core",
+        "pageSize": limit
+    }
+
+    async with httpx.AsyncClient(timeout=40) as client:
+
+        response = await client.get(
+            f"{EUROPE_PMC_BASE}/search",
+            params=params
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+    results = []
+
+    for item in data.get("resultList", {}).get("result", []):
+
+        pmcid = item.get("pmcid", "")
+
+        results.append({
+
+            "source": "Europe PMC",
+
+            "id": item.get("id", ""),
+
+            "source_database": item.get("source", ""),
+
+            "pmid": item.get("pmid", ""),
+
+            "pmcid": pmcid,
+
+            "title": item.get("title", ""),
+
+            "authors": item.get("authorString", ""),
+
+            "journal": item.get("journalTitle", ""),
+
+            "year": item.get("pubYear", ""),
+
+            "publication_date": item.get(
+                "firstPublicationDate", ""
+            ),
+
+            "doi": item.get("doi", ""),
+
+            "abstract": item.get("abstractText", ""),
+
+            "publication_type": item.get("pubTypeList", {}).get(
+                "pubType", []
+            ),
+
+            "is_open_access": item.get(
+                "isOpenAccess", "N"
+            ) == "Y",
+
+            "has_full_text": item.get(
+                "inEPMC", "N"
+            ) == "Y",
+
+            "pubmed_url": (
+                f"https://pubmed.ncbi.nlm.nih.gov/"
+                f"{item.get('pmid')}/"
+                if item.get("pmid") else ""
+            ),
+
+            "europe_pmc_url": (
+                f"https://europepmc.org/article/"
+                f"{item.get('source')}/"
+                f"{item.get('id')}"
+            )
+        })
+
+    return {
+
+        "database": "Europe PMC",
+
+        "search_query": search_query,
+
+        "total_results": data.get("hitCount", 0),
+
+        "returned_results": len(results),
+
+        "articles": results
+    }
+
+
+@mcp.tool()
+async def fetch_europe_pmc_full_text(
+    pmcid: str
+) -> dict:
+    """
+    Retrieve full text XML for an eligible
+    Europe PMC open-access article.
+
+    Requires a valid PMCID such as PMC1234567.
+    """
+
+    pmcid = pmcid.strip().upper()
+
+    if not pmcid.startswith("PMC"):
+        raise ValueError("Provide a valid PMCID, e.g. PMC1234567")
+
+    if not pmcid[3:].isdigit():
+        raise ValueError("Invalid PMCID format")
+
+    async with httpx.AsyncClient(timeout=60) as client:
+
+        response = await client.get(
+            f"{EUROPE_PMC_BASE}/{pmcid}/fullTextXML"
+        )
+
+        if response.status_code == 404:
+            return {
+                "pmcid": pmcid,
+                "available": False,
+                "message": "Full text is unavailable."
+            }
+
+        response.raise_for_status()
+
+    root = ET.fromstring(response.text)
+
+    sections = []
+
+    for element in root.iter():
+
+        if element.tag.split("}")[-1] in (
+            "article-title",
+            "abstract",
+            "title",
+            "p"
+        ):
+
+            text_content = " ".join(
+                "".join(element.itertext()).split()
+            )
+
+            if text_content:
+                sections.append(text_content)
+
+    full_text = "\n\n".join(sections)
+
+    return {
+
+        "pmcid": pmcid,
+
+        "available": True,
+
+        "source": "Europe PMC",
+
+        "full_text": full_text[:40000],
+
+        "truncated": len(full_text) > 40000,
+
+        "source_url": (
+            f"https://europepmc.org/articles/{pmcid}"
+        )
+    }
+
+
+@mcp.tool()
+async def find_open_access_articles(
+    query: str,
+    limit: int = 20
+) -> dict:
+    """
+    Find biomedical articles with open-access
+    full-text availability.
+    """
+
+    return await search_europe_pmc(
+        query=query,
+        limit=limit,
+        open_access_only=True,
+        sort_recent=True
+    )
 
 if __name__ == "__main__":
     mcp.run(transport="streamable-http")
