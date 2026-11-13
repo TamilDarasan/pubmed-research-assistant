@@ -392,7 +392,7 @@ async def search_europe_pmc(
     }
 
     if sort_recent:
-        params["sort"] = "P_PDATE_D desc"
+        params["query"] += " sort_date:y"
 
     data = (
         await europe_pmc_request(
