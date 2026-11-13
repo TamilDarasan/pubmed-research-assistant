@@ -135,4 +135,8 @@ async def fetch_pubmed_articles(pmids: list[str]) -> list[dict]:
     return records
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    mcp.run(
+        transport="streamable-http",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+    )
